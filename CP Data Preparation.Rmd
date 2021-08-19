@@ -1,0 +1,94 @@
+---
+title: "Capstone Data Analysis Code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(quanteda)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+load("221020-291020.RData")
+```
+
+List of words to filter for religious attitudes: Katol, relig, ksiadz, ksiez, ksiedz, biskup, kosciol, kosciel, Rydzyk, Maryj, Maryj, 
+
+#Filtering Text 
+```{r}
+religiondict <-  dictionary(list(catholicism = c("*katol*","relig*","*ksiadz*", "*ksiądz*" ,"*ksiez*", "*księż*", "*ksiedz*", "*księdz*","*biskup*","*kosciol*","*kościół*", "*kosciel*","*kościel*","*rydzyk*","*katech*","*krzyz*", "*krzyż*","*kler*","*bóg*", "*bog*","bibli*","bibil*" ))) 
+```
+
+1. Corpus & Dfm
+```{r}
+twcorpus <- corpus(tweets2$text)
+twtokens <- tokens(twcorpus, remove_punct = TRUE, remove_url=TRUE)
+twtokens <- tokens_tolower(twtokens)
+
+twdfm <- dfm(twcorpus, verbose=TRUE)
+```
+
+2. Apply glob dictionary to dfm 
+```{r}
+dfm_dictionary <- dfm_lookup(twdfm, dictionary = religiondict,
+                               valuetype = "glob")
+head(dfm_dictionary)
+```
+
+```{r}
+dict_freq <- convert(dfm_dictionary, to = c("data.frame"))
+```
+
+Append frequency to data
+```{r}
+religion_tweets <- cbind(tweets2, dict_freq)
+```
+
+Remove tweets with zero
+```{r}
+religion_tweets <- religion_tweets %>% filter(catholicism != 0)
+
+religion_tweets <- religion_tweets %>% filter(lang == "pl")
+```
+
+#Tweet and User Frequencies by day
+```{r}
+#Remove Hour posted
+religion_tweets$created_at <- gsub("\\T.*","",religion_tweets$created_at)
+
+#Group by day and create frequencies of posts in each group
+
+date_freq <- religion_tweets %>% group_by(created_at) %>% summarise(n = n())
+
+#Create graph of frequencies
+
+date_freq <- date_freq %>%
+   mutate(created_at=as.Date(created_at, format = "%Y-%m-%d"))
+
+d <- ggplot(data=date_freq, aes(x=created_at, y=n, group=1)) +  geom_line()+ geom_point() + theme_bw()
+d <- d + xlab("Date") + ylab("Number of Tweets") + scale_x_date(date_breaks = "1 day")
+d
+```
+
+```{r}
+#Same for user but only keep unique ones
+user_freq <- religion_tweets %>%
+  select(created_at, author_id )%>%
+  unique()%>%
+  group_by(created_at) %>%
+  summarise(n = n())
+
+user_freq <- user_freq %>%
+   mutate(created_at=as.Date(created_at, format = "%Y-%m-%d"))
+
+u <- ggplot(data=user_freq, aes(x=created_at, y=n, group=1)) + geom_line()+ geom_point() + theme_bw()
+u <- u + xlab("Date") + ylab("Number of Users") + scale_x_date(date_breaks = "1 day")
+u
+```
+

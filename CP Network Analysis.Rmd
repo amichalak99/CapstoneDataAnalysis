@@ -1,0 +1,307 @@
+---
+title: "Network Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(quanteda)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(rtweet)
+library(igraph)
+library(scales)
+```
+
+#Network Analysis
+
+```{r}
+religion_tweets$entities$mentions <- gsub(".*username =","",religion_tweets$entities$mentions)
+```
+
+```{r}
+repledges <-religion_tweets[c(11,15)]
+repledges <- cbind(repledges, tweet_text$sentiment_score)
+```
+
+```{r}
+menedges <- religion_tweets[c(11)]
+```
+
+```{r}
+menedges <- cbind(menedges, religion_tweets$entities$mentions)
+menedges <- cbind(menedges, tweet_text$sentiment_score)
+```
+```{r}
+colnames(menedges) <- c("author_id","mentions", "sentiment_score")
+colnames(repledges) <- c("author_id","mentions", "sentiment_score")
+```
+
+```{r}
+menedges$mentions <- gsub('.*\\(' , "",menedges$mentions)
+menedges$mentions <- str_remove(menedges$mentions, "[))]")
+menedges$mentions <- str_remove(menedges$mentions, "[))]")
+```
+
+```{r}
+menedges <- menedges %>% 
+    mutate(mentions = strsplit(as.character(mentions), ",")) %>% 
+    unnest(mentions)
+```
+
+```{r}
+menedges <-menedges %>% 
+  filter(mentions != "NULL")
+```
+
+```{r}
+menedges$mentions <- gsub('"' , "",menedges$mentions)
+```
+
+```{r}
+repledges <-repledges %>% 
+  filter(mentions != "is.na")
+```
+
+```{r}
+repledges <- subset(repledges, repledges$author_id != repledges$mentions)
+```
+
+```{r}
+avector <- as.vector(menedges['mentions'])
+avector <- unlist(avector)
+```
+
+```{r}
+usr_df <- lookup_users(avector)
+```
+
+```{r}
+for (i in 1:nrow(usr_df)) {
+menedges$mentions <- gsub(usr_df[i,4], usr_df[i,1], menedges$mentions)  
+}
+```
+
+```{r}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+```
+
+```{r}
+menedges <- subset(menedges, menedges$author_id != menedges$mentions)
+```
+
+```{r}
+menmodess <- menedges %>% select(author_id, sentiment_score) %>% group_by(author_id)%>% summarise(mean = Mode(sentiment_score))
+```
+```{r}
+repmodess <- repledges %>% select(author_id, sentiment_score) %>% group_by(author_id)%>% summarise(mean = Mode(sentiment_score))
+```
+
+
+#Creating and plotting the network
+
+```{r}
+menadj <- get.adjacency(graph.edgelist(as.matrix(menedges[,1:2]), directed=TRUE))
+mennet <- graph.adjacency(as.matrix(menadj, diag=F))
+mennet <- delete.vertices(mennet, which(degree(mennet)<=2))
+
+summary(mennet)
+```
+
+```{r}
+V(mennet)$sentiment <- sapply(V(mennet)$name, function(x) menmodess$mean[menmodess$author_id == x])
+```
+
+```{r}
+V(mennet)$sentiment[V(mennet)$sentiment == "numeric(0)"] <- 0
+V(mennet)$color <- V(mennet)$sentiment
+
+V(mennet)$color[V(mennet)$color == 0.6] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0.5] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0.4] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0.3] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0.2] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0.1] <- "#59ff59"
+V(mennet)$color[V(mennet)$color == 0] <- "#ffffff"
+V(mennet)$color[V(mennet)$color == -0.1] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.2] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.3] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.4] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.5] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.6] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.7] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.8] <- "#ff5959"
+V(mennet)$color[V(mennet)$color == -0.9] <- "#ff5959"
+```
+
+```{r}
+mlayout <- layout.fruchterman.reingold(mennet)
+plot(mennet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color, layout = mlayout))
+```
+
+```{r}
+repladj <- get.adjacency(graph.edgelist(as.matrix(repledges[,1:2]), directed=TRUE))
+replnet <- graph.adjacency(as.matrix(repladj, diag=F))
+
+summary(replnet)
+```
+
+```{r}
+V(replnet)$sentiment <- sapply(V(replnet)$name, function(x) repmodess$mean[repmodess$author_id == x])
+```
+
+```{r}
+V(replnet)$sentiment[V(replnet)$sentiment == "numeric(0)"] <- 0
+V(replnet)$color <- V(replnet)$sentiment
+
+V(replnet)$color[V(replnet)$color == 0.6] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0.5] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0.4] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0.3] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0.2] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0.1] <- "#59ff59"
+V(replnet)$color[V(replnet)$color == 0] <- "#ffffff"
+V(replnet)$color[V(replnet)$color == -0.1] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.2] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.3] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.4] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.5] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.6] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.7] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.8] <- "#ff5959"
+V(replnet)$color[V(replnet)$color == -0.9] <- "#ff5959"
+```
+
+```{r}
+dlayout <- layout.fruchterman.reingold(replnet)
+plot(replnet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(replnet)$color), layout = dlayout)
+```
+```{r}
+par(mfrow=c(1,2), mar=c(0,1,2,1)) 
+
+plot(mennet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = mlayout)
+
+plot(replnet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(replnet)$color), layout = dlayout)
+```
+
+#Analysis of Mentions Network
+
+```{r}
+vcount(mennet)
+ecount(mennet)
+mean(degree(mennet))
+graph.density(mennet)
+diameter(mennet)
+```
+
+
+```{r}
+#Centralities
+
+Indegree1 <- degree(mennet, mode="in")
+summary(Indegree)
+hist(Indegree,breaks=20)
+```
+
+```{r}
+Outdegree1 <- degree(mennet, mode="out")
+summary(Outdegree)
+hist(Outdegree,breaks=20)
+```
+
+```{r}
+par(mfrow=c(1,2), mar=c(0,1,2,1)) 
+plot(mennet, vertex.label=NA, vertex.size= rescale(Indegree1, c(1,8)) ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = mlayout)
+plot(mennet, vertex.label=NA, vertex.size= rescale(Outdegree1, c(1,8)) ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = mlayout)
+```
+
+#Dyads and Tryads
+
+```{r}
+reciprocity(mennet)
+```
+```{r}
+transitivity(mennet)
+```
+```{r}
+assortativity.nominal(mennet,factor(as.character(V(mennet)$color)))
+```
+
+#Assortativity and Community Structure
+
+```{r}
+eb1 <- cluster_edge_betweenness(mennet, directed = TRUE)
+```
+```{r}
+sizes(eb1)
+```
+
+```{r}
+plot(eb1, mennet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = mlayout)
+```
+
+#Analysis of the Replies Network
+```{r}
+vcount(replnet)
+ecount(replnet)
+mean(degree(replnet))
+graph.density(replnet)
+diameter(replnet)
+```
+
+```{r}
+#Centralities
+
+Indegree <- degree(replnet, mode="in")
+summary(Indegree)
+hist(Indegree,breaks=20)
+```
+
+```{r}
+Outdegree <- degree(replnet, mode="out")
+summary(Outdegree)
+hist(Outdegree,breaks=20)
+```
+```{r}
+par(mfrow=c(1,2), mar=c(0,1,2,1)) 
+plot(replnet, vertex.label=NA, vertex.size= rescale(Indegree, c(1,8)) ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = dlayout)
+plot(replnet, vertex.label=NA, vertex.size= rescale(Outdegree, c(1,8)) ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = dlayout)
+```
+
+#Dyads and Tryads
+
+```{r}
+reciprocity(replnet)
+```
+```{r}
+transitivity(replnet)
+```
+```{r}
+assortativity.nominal(replnet,factor(as.character(V(replnet)$color)))
+```
+
+#Assortativity and Community Structure
+
+```{r}
+eb <- cluster_edge_betweenness(replnet, directed = TRUE)
+```
+```{r}
+sizes(eb)
+```
+
+```{r}
+plot(eb, replnet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(replnet)$color), layout = dlayout)
+```
+```{r}
+par(mfrow=c(1,2), mar=c(0,1,2,1)) 
+plot(eb1, mennet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(mennet)$color), layout = mlayout)
+plot(eb, replnet, vertex.label=NA, vertex.size= 3 ,edge.width=0.5, edge.arrow.size = 0.3, vertex.color = as.character(V(replnet)$color), layout = dlayout)
+```
+

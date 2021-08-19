@@ -1,0 +1,106 @@
+---
+title: "LDA Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Selecting number of topics
+
+```{r}
+library("ldatuning")
+library(quanteda.textmodels)
+library(topicmodels)
+```
+
+```{r}
+#Separate into positive and negative 
+positive_tweets <- tweet_text %>% filter(sentiment_score >= 0.1)
+colnames(positive_tweets)[1] <- "text"
+negative_tweets <- tweet_text %>% filter(sentiment_score <= -0.1)
+colnames(negative_tweets)[1] <- "text"
+```
+
+#Turn lematized text into dfm
+https://github.com/bieli/stopwords
+```{r}
+stopwordsPL <- readLines("polish.stopwords.txt", encoding = "UTF-8")
+
+poscorpus <- corpus(positive_tweets$text)
+posdfm <- twcorpus %>%
+    tokens(remove_punct = TRUE, remove_url = TRUE) %>% 
+    tokens_remove(pattern = "#*")%>%
+    tokens_remove(pattern = stopwords("en"))%>%
+    tokens_remove(pattern = "@*")%>%
+    tokens_remove(pattern = "https:*")%>%
+    tokens_remove(pattern = "rt")%>%
+    tokens_remove(pattern = stopwordsPL)%>%
+    dfm()
+
+negcorpus <- corpus(negative_tweets$text)
+negdfm <- twcorpus %>%
+    tokens(remove_punct = TRUE, remove_url = TRUE) %>% 
+    tokens_remove(pattern = "#*")%>%
+    tokens_remove(pattern = stopwords("en"))%>%
+    tokens_remove(pattern = "@*")%>%
+    tokens_remove(pattern = "https:*")%>%
+    tokens_remove(pattern = "rt")%>%
+    tokens_remove(pattern = stopwordsPL)%>%
+    dfm()
+```
+#Change dfm to tm 
+```{r}
+posdfm <- dfm_subset(posdfm, ntoken(posdfm) > 0)
+posmat <- convert(posdfm, to = "tm")
+
+negdfm <- dfm_subset(negdfm, ntoken(negdfm) > 0)
+negmat <- convert(negdfm, to = "tm")
+```
+
+#Find optimal number of topics
+```{r}
+pos_result <- FindTopicsNumber(
+  posmat,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  mc.cores = 2L,
+  verbose = TRUE
+)
+```
+
+```{r}
+neg_result <- FindTopicsNumber(
+  negmat,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  mc.cores = 2L,
+  verbose = TRUE
+)
+```
+
+```{r}
+FindTopicsNumber_plot(pos_result)
+```
+```{r}
+FindTopicsNumber_plot(neg_result)
+```
+#Create Topic Models
+```{r}
+postopicModel <- LDA(posdfm, 8, method="Gibbs", control=list(iter = 100, seed = 123))
+negtopicModel <- LDA(negdfm, 8, method="Gibbs", control=list(iter = 100, seed = 124))
+```
+
+```{r}
+terms(postopicModel, 20)
+```
+
+```{r}
+terms(negtopicModel, 20)
+```
+

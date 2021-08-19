@@ -1,0 +1,130 @@
+---
+title: "Sentiment Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(quanteda)
+library(dplyr)
+library(ggplot2)
+```
+
+#Sentiment Dictionary
+http://plwordnet.pwr.wroc.pl/wordnet/ 
+```{r}
+sentiment_dict <- read.csv(file = 'słownik_anotacji_emocjonlanej.csv')
+```
+
+#Lemmatization Function
+https://github.com/mw0000/R/blob/master/funkcje/nlprest2.R 
+```{r}
+nlprest2 <- function(t,u) {
+  library(httr)
+  library(xml2)
+  d <- data.frame(stringsAsFactors = FALSE)
+  p <- list(lpmn="any2txt|wcrft2",text=t,user=u)
+  s <- POST("http://ws.clarin-pl.eu/nlprest2/base/process", body = p, encode = "json", verbose())
+  r <- content(s, "text")
+  orth <- unlist(as_list(xml_find_all(read_xml(r),"//tok/orth")))
+  base <- unlist(as_list(xml_find_all(read_xml(r),"//tok/lex/base")))
+  ctag <- unlist(as_list(xml_find_all(read_xml(r),"//tok/lex/ctag"))) 
+  d <- rbind(d, as.data.frame(list(base = base, ctag = ctag), stringsAsFactors = FALSE))
+  t <- paste(d$base, collapse = " ")
+  return(list(source = unlist(strsplit(t, " ")), table = d, string = gsub('[[:punct:] ]+',' ',t)))
+}
+```
+
+u = "fds9sdfl@0fds8.pl"
+
+#Creating Sentiment Dictionaries
+```{r}
+#Selecting relevant columns
+sentiment_dict<- sentiment_dict %>% select(lemat, stopien_nacechowania)
+sentiment_dict <- sentiment_dict %>% filter(stopien_nacechowania != "")
+
+#Create pos and neg
+s.positive <- sentiment_dict %>% filter(stopien_nacechowania == "+ m") %>% unique()
+w.positive <- sentiment_dict %>% filter(stopien_nacechowania == "+ s") %>% unique()
+s.negative <- sentiment_dict %>% filter(stopien_nacechowania == "- m") %>% unique()
+w.negative <- sentiment_dict %>% filter(stopien_nacechowania == "- s") %>% unique()
+
+#Change to character vector
+spos <- as.vector(s.positive[['lemat']])
+wpos <- as.vector(w.positive[['lemat']])
+sneg <- as.vector(s.negative[['lemat']])
+wneg <- as.vector(w.negative[['lemat']])
+```
+
+#Lemmatizing Text
+
+```{r}
+lem_tweet <- religion_tweets
+```
+
+```{r}
+for(i in 627:nrow(lem_tweet)) {
+  t <- nlprest2(lem_tweet[i, 3],"fds9sdfl@0fds8.pl")
+  lem_tweet[i, 3]<-t$string
+}
+```
+
+#Sentiment Classification of Text
+```{r}
+tweet_corpus <- corpus(lem_tweet$text)
+tweet_tokens <- tokens(tweet_corpus, remove_punct = TRUE, remove_url=TRUE)
+tweet_tokens <- tokens_tolower(tweet_tokens)
+dfmtweet <- dfm(tweet_tokens)
+
+
+sentiment_dictionary <- dictionary(list(strong_negative_sent = sneg,
+                                        negative_sent = wneg,
+                                        strong_positive_sent = spos,
+                                        positive_sent = wpos))
+```
+
+```{r}
+tweet_dictionary <- dfm_lookup(dfmtweet, dictionary = sentiment_dictionary)
+tweet_dictionary<-convert(tweet_dictionary, to = "data.frame")
+tweet_text<- cbind(lem_tweet$text, tweet_dictionary)
+```
+
+#Creating a sentiment score
+```{r}
+tweet_text$strong_negative_sent <- tweet_text$strong_negative_sent * 2
+tweet_text$strong_positive_sent <- tweet_text$strong_positive_sent * 2
+```
+
+```{r}
+tweet_text$strong_negative_sent <- tweet_text$strong_negative_sent * -1
+tweet_text$negative_sent <- tweet_text$negative_sent * -1
+```
+
+```{r}
+tweet_text$sentiment_score <- tweet_text$strong_negative_sent + tweet_text$strong_positive_sent + tweet_text$negative_sent + tweet_text$positive_sent
+```
+
+```{r}
+tweet_text$sentiment_score  <- scale(tweet_text$sentiment_score , center = FALSE, scale = max(tweet_text$sentiment_score , na.rm = TRUE)/1)
+```
+
+```{r}
+tweet_text$sentiment_score <- round(tweet_text$sentiment_score, digits = 1)
+```
+
+#Sentiment Score Distribution
+```{r}
+condpos <- tweet_text$sentiment_score >= 0.1
+condneg <- tweet_text$sentiment_score <= -0.1
+
+
+p <- ggplot(tweet_text, aes(x=sentiment_score)) + geom_histogram(color="black", fill = "grey") + theme_bw()
+
+p <- p + geom_histogram(data=subset(tweet_text,condpos==TRUE), color="black", fill="#72b077") + geom_histogram(data=subset(tweet_text,condneg ==TRUE), color="black", fill="#e36671")
+
+p + xlab("Sentiment Scale") + ylab("Number of Tweets")
+```
+
